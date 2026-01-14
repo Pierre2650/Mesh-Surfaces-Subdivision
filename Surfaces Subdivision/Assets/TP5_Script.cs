@@ -18,17 +18,47 @@ public class TP5_Script : MonoBehaviour
     public List<Vector2> divideGraph = new List<Vector2>();
 
     [Header("Loop's")]
-    private MeshFilter myMF;
+    [Range(1, 6)]
+    public int nbLoopDivitions = 1;
     public string fileName;
+    private MeshFilter myMF;
+
     private List<Vector3> vertices = null;
     private List<int> triangles = new List<int>();
-    public List<Vector3> newVertices = new List<Vector3>();
+    private List<Vector3> newVertices = new List<Vector3>();
+
+    private class Edge
+    {
+        public int v1Index;
+        public int v2Index;
+
+        public int v3Index;
+        public int v4Index = -1;
+
+        public int splitIndex = -1;
+
+        public Edge(int v1, int v2, int v3)
+        {
+            v1Index = v1;
+            v2Index = v2;
+            v3Index = v3;
+        }
+
+    }
+
+    List<Edge> Edges = new List<Edge>();
 
     private void Start()
     {
         myMF = GetComponent<MeshFilter>();
         readOFF();
-        loopAlgorithm();
+
+        for(int i =0; i < nbLoopDivitions; i++)
+        {
+            loopAlgorithm();
+            Edges.Clear();
+            newVertices.Clear();
+        }
     }
 
     private void readOFF()
@@ -98,9 +128,6 @@ public class TP5_Script : MonoBehaviour
         myMF.mesh.triangles = triangles.ToArray();
 
 
-        Debug.Log("nbVertices = "+vertices.Count);
-        Debug.Log("TrianglesCount = "+ triangles.Count);
-
     }
 
 
@@ -140,128 +167,247 @@ public class TP5_Script : MonoBehaviour
 
     private void loopAlgorithm()
     {
+        //Split
+       // List<int> updateTriangles = new List<int>(triangles);
 
-        //pour tout vertex calculer new vertex 
-        for (int i = 0; i < triangles.Count - 1; i+=3) {
-            // edge 1 triangles[0] triangles[1]
-            // edge 2 triangles[0] triangles[2]
-            // edge 3 triangles[1] triangles[2]
+        findEdges();
+        int lastIndex = vertices.Count - 1;
 
-            Vector3 newV1 = edgeSplit(i, i + 1);
-            Vector3 newV2 = edgeSplit(i, i + 2);
-            Vector3 newV3 = edgeSplit(i + 1, i + 2);
+        foreach (Edge e in Edges)
+        {
+            Vector3 newV = edgeSplit(e);
+            newVertices.Add(newV);
+            lastIndex++;
+            e.splitIndex = lastIndex;
 
-            newVertices.Add(newV1);
-            newVertices.Add(newV2);
-            newVertices.Add(newV3);
+        }
+
+
+        //Reposition
+        List<Vector3> updateVertices = new List<Vector3>();
+        for(int i = 0; i< vertices.Count; i++)
+        {
+            updateVertices.Add(VertexReposition(i));
+        }
+
+        //Update
+        for (int i = 0; i < newVertices.Count; i++)
+        {
+            updateVertices.Add(newVertices[i]);
         }
 
 
 
+        List<int> updateTriangles = newTriangles();
+
+
+        vertices = updateVertices;
+        triangles = updateTriangles;
+        myMF.mesh.vertices = vertices.ToArray();
+        myMF.mesh.triangles = triangles.ToArray();
+
 
     }
 
-    private Vector3 edgeSplit(int v1Index, int  v2Index)
+    private void findEdges()
+    {
+        for (int i = 0; i < triangles.Count - 1; i += 3)
+        {
+            // edge 1 triangles[0] triangles[1]
+            // edge 2 triangles[0] triangles[2]
+            // edge 3 triangles[1] triangles[2]
+
+            if (!edgeExist(triangles[i], triangles[i + 1]))
+            {
+                Edges.Add(new Edge(triangles[i], triangles[i + 1], triangles[i+2]));
+            }
+            else
+            { 
+                Edge temp = Edges.Find((x => (x.v1Index == triangles[i] && x.v2Index == triangles[i+1]) || (x.v1Index == triangles[i+1] && x.v2Index == triangles[i])));
+                temp.v4Index = triangles[i + 2];
+            }
+
+            if (!edgeExist(triangles[i], triangles[i + 2]))
+            {
+                Edges.Add(new Edge(triangles[i], triangles[i + 2], triangles[i+1]));
+            }
+            else
+            {
+                Edge temp = Edges.Find((x => (x.v1Index == triangles[i] && x.v2Index == triangles[i + 2]) || (x.v1Index == triangles[i + 2] && x.v2Index == triangles[i])));
+                temp.v4Index = triangles[i+1];
+            }
+
+            if (!edgeExist(triangles[i+1], triangles[i + 2]))
+            {
+                Edges.Add(new Edge(triangles[i+1], triangles[i + 2], triangles[i]));
+            }
+            else
+            {
+                Edge temp = Edges.Find((x => (x.v1Index == triangles[i+1] && x.v2Index == triangles[i + 2]) || (x.v1Index == triangles[i + 2] && x.v2Index == triangles[i+1])));
+                temp.v4Index = triangles[i];
+            }
+
+        }
+
+
+    }
+
+    private bool edgeExist(int v1Index, int v2Index) 
+    {
+        foreach(Edge e in Edges)
+        {
+            if(e.v1Index == v1Index && e.v2Index == v2Index)
+            {
+                return true;
+            }
+
+            if (e.v1Index == v2Index && e.v2Index == v1Index)
+            {
+                return true;
+            }
+
+        }
+
+        return false;
+    }
+
+    private Vector3 edgeSplit(Edge e)
     {
 
-        findTriangles(v1Index, v2Index, out int v3Index, out int v4Index);
+        if (e.v3Index == -1 || e.v4Index == -1)
+        {
+            Debug.Log("a vertex neighbor wasn't found,   v3Index = " + e.v3Index + "    v4Index = " + e.v4Index);
+            return Vector3.zero;
+        }
 
-        Vector3 v1 = vertices[triangles[v1Index]];
-        Vector3 v2 = vertices[triangles[v2Index]];
-        Vector3 v3 = vertices[triangles[v3Index]];        
-        Vector3 v4 = vertices[triangles[v4Index]];
+
+        Vector3 v1 = vertices[e.v1Index];
+        Vector3 v2 = vertices[e.v2Index];
+        Vector3 v3 = vertices[e.v3Index];
+        Vector3 v4 = vertices[e.v4Index];
 
         Vector3 newVertex = (3f / 8f) * (v1 + v2) + (1f / 8f) * (v3 + v4);
 
-            
         return newVertex;
-        
+
 
     }
 
 
-
-    private void findTriangles(int v1Index, int v2Index, out int v3Index, out int v4Index)
+    private Vector3 VertexReposition(int vIndex)
     {
-        v3Index = -1; v4Index = -1;
+        List<int> neightborsIndex = findneightborVertices(vIndex);
+        int n = neightborsIndex.Count;
+        float weight = 0;
 
+        if (n == 6)
+        {
+            weight = 1f / 16f;
+        }
+        else
+        {
+             weight = (1 / (float)n) * (5f / 8f - Mathf.Pow(3f / 8f + 1f / 4f * Mathf.Cos((2f * Mathf.PI) / (float)n), 2));
+        }
+      
+
+        Vector3 newVertexPos = Vector3.zero;
+        Vector3 epsilon = Vector3.zero;
+        foreach(int i  in neightborsIndex)
+        {
+
+            epsilon += vertices[i];
+        }
+
+        newVertexPos = (1 - (float)n * weight) * vertices[vIndex] + weight * epsilon;
+
+        return newVertexPos;
+    }
+
+    private List<int> findneightborVertices(int VIndex) {
+
+        List<int> neightborsIndexes = new List<int>();
 
         for (int i = 0; i < triangles.Count - 3; i += 3)
         {
-            bool v1Exist = true, v2Exist = false;
+            if (triangles[i] == VIndex) {
+                
+                if(!neightborsIndexes.Exists(x => x == triangles[i+1]))
+                {
+                    neightborsIndexes.Add(triangles[i + 1]);
+                }
+
+                if (!neightborsIndexes.Exists(x => x == triangles[i + 2]))
+                {
+                    neightborsIndexes.Add(triangles[i + 2]);
+                }
+
+            } else if (triangles[i+1] == VIndex)
+            {
+
+                if (!neightborsIndexes.Exists(x => x == triangles[i]))
+                {
+                    neightborsIndexes.Add(triangles[i]);
+                }
+
+                if (!neightborsIndexes.Exists(x => x == triangles[i + 2]))
+                {
+                    neightborsIndexes.Add(triangles[i + 2]);
+                }
+
+            } else if (triangles[i+2] == VIndex)
+            {
+
+                if (!neightborsIndexes.Exists(x => x == triangles[i]))
+                {
+                    neightborsIndexes.Add(triangles[i]);
+                }
+
+                if (!neightborsIndexes.Exists(x => x == triangles[i + 1]))
+                {
+                    neightborsIndexes.Add(triangles[i + 1]);
+                }
+
+            }
+        }
+
+        return neightborsIndexes;
+    }
+
+
+    private List<int> newTriangles()
+    {
+        List<int> updateTriangles = new List<int>();
+
+        for (int i = 0; i < triangles.Count - 1; i += 3)
+        {
             // edge 1 triangles[0] triangles[1]
             // edge 2 triangles[0] triangles[2]
             // edge 3 triangles[1] triangles[2]
 
-            if (triangles[i] == triangles[v1Index])
-            {
-                v1Exist = true;
-            }
-            else if (triangles[i] == triangles[v2Index]) {
-                v2Exist = true;
-            }
+            Edge edge1 = Edges.Find((x => (x.v1Index == triangles[i] && x.v2Index == triangles[i+1]) || (x.v1Index == triangles[i + 1] && x.v2Index == triangles[i])));
+            Edge edge2 = Edges.Find((x => (x.v1Index == triangles[i] && x.v2Index == triangles[i + 2]) || (x.v1Index == triangles[i + 2] && x.v2Index == triangles[i])));
+            Edge edge3 = Edges.Find((x => (x.v1Index == triangles[i+1] && x.v2Index == triangles[i + 2]) || (x.v1Index == triangles[i + 2] && x.v2Index == triangles[i+1])));
 
-            if (triangles[i + 1] == triangles[v1Index])
-            {
-                v1Exist = true;
-            }
-            else if (triangles[i+1] == triangles[v2Index])
-            {
-                v2Exist = true;
-            }
+            updateTriangles.Add(triangles[i]);
+            updateTriangles.Add(edge1.splitIndex);
+            updateTriangles.Add(edge2.splitIndex);
 
-            if (triangles[i+2] == triangles[v1Index])
-            {
-                v1Exist = true;
-            }
-            else if (triangles[i+2] == triangles[v2Index])
-            {
-                v2Exist = true;
-            }
+            updateTriangles.Add(edge2.splitIndex);
+            updateTriangles.Add(edge3.splitIndex);
+            updateTriangles.Add(triangles[i+2]);
 
-            if(v1Exist && v2Exist)
-            {
-                if(v3Index == -1)
-                {
-                    v3Index = i;
-                }else if(v4Index == -1)
-                {
-                    v4Index = i;
-                }
-            }
+            updateTriangles.Add(edge1.splitIndex);
+            updateTriangles.Add(triangles[i + 1]);
+            updateTriangles.Add(edge3.splitIndex);
 
-
-
-
-        }
-    }
-
-    private void findNeighbors(int vertexIndex)
-    {
-        int counter = 0; 
-
-        for (int i = 0; i < triangles.Count - 3; i += 3)
-        {
-            if (triangles[i] == vertexIndex)
-            {
-                counter++;
-            }
-            
-
-            if (triangles[i + 1] == vertexIndex)
-            {
-                counter++;
-            }
-           
-
-            if (triangles[i + 2] == vertexIndex)
-            {
-                counter++;
-            }
-          
-           
+            updateTriangles.Add(edge1.splitIndex);
+            updateTriangles.Add(edge3.splitIndex);
+            updateTriangles.Add(edge2.splitIndex);
         }
 
+       
+
+        return updateTriangles;
     }
 
 
@@ -288,12 +434,15 @@ public class TP5_Script : MonoBehaviour
             Gizmos.DrawWireSphere(divideGraph[i], 0.1f);
         }*/
 
-        Gizmos.color = Color.red;
+        /*Gizmos.color = Color.red;
         foreach (Vector3 v in newVertices)
         {
-            Gizmos.DrawWireSphere(v, 0.1f);
+            Gizmos.DrawWireSphere(v, 0.05f);
         }
 
-
+        foreach (Vector3 v in vertices)
+        {
+            Gizmos.DrawWireSphere(v, 0.05f);
+        }*/
     }
 }
