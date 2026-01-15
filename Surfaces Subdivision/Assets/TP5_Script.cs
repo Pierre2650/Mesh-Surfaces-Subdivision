@@ -13,6 +13,7 @@ public class TP5_Script : MonoBehaviour
     [Header("Chakin's")]
     [Range(1, 10)]
     public int nbDivitions = 1;
+    public bool showGraph = true;
 
     public List<Vector2> baseGraph = new List<Vector2>();
     public List<Vector2> divideGraph = new List<Vector2>();
@@ -413,6 +414,7 @@ public class TP5_Script : MonoBehaviour
 
     private void OnDrawGizmos()
     {
+        if (!showGraph) {  return; }
         if (baseGraph.Count < 2) { return; }
         Gizmos.color = Color.yellow;
         for(int i = 0 ; i < baseGraph.Count - 1; i++)
@@ -429,20 +431,5 @@ public class TP5_Script : MonoBehaviour
             Gizmos.DrawLine(divideGraph[i], divideGraph[i + 1]);
         }
 
-        /*for (int i = 0; i < divideGraph.Count; i++)
-        {
-            Gizmos.DrawWireSphere(divideGraph[i], 0.1f);
-        }*/
-
-        /*Gizmos.color = Color.red;
-        foreach (Vector3 v in newVertices)
-        {
-            Gizmos.DrawWireSphere(v, 0.05f);
-        }
-
-        foreach (Vector3 v in vertices)
-        {
-            Gizmos.DrawWireSphere(v, 0.05f);
-        }*/
-    }
+         }
 }
