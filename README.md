@@ -8,7 +8,7 @@ The script allows you to configure the level of subdivision for both graphs and 
 
 ##  Subdivision Results 
 ### Chakin's
-![Parametrage](Images/grid.jpg)
+![Parametrage](Images/Chakins.gif)
 
 ### Loop's
 #### Simple Cube Mesh
